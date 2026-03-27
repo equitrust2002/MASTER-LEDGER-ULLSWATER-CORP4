@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ULLSWATER | MASTER LEDGER v7.7</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root { --black: #000; --white: #fff; --accent: #eeeeee; }
+        body { font-family: 'Courier New', Courier, monospace; background: var(--accent); padding: 10px; color: var(--black); margin: 0; }
+        .form-container { max-width: 1050px; background: var(--white); margin: auto; padding: 40px; border: 6px solid var(--black); box-shadow: 15px 15px 0px var(--black); }
+        
+        /* HEADER & VIVID QR */
+        .header { display: flex; flex-wrap: wrap; justify-content: space-between; border-bottom: 10px double var(--black); padding-bottom: 30px; margin-bottom: 25px; gap: 20px; }
+        #qrcode-container { border: 5px solid var(--black); padding: 15px; background: var(--white); width: 320px; text-align: center; flex-shrink: 0; margin: auto; }
+        #qrcode img { width: 100%; height: auto; image-rendering: pixelated; display: block; margin: auto; }
+
+        /* THE RESTORED FILTERS */
+        .filter-section { background: var(--black); color: var(--white); padding: 15px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; font-weight: 900; }
+        .filter-section input { background: var(--white); border: none; padding: 6px; font-family: inherit; width: 150px; }
+
+        /* TABLE ARCHITECTURE */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; table-layout: fixed; }
+        th, td { border: 2px solid var(--black); padding: 12px; text-align: center; vertical-align: top; word-wrap: break-word; }
+        .bg-black { background: var(--black); color: var(--white); }
+        input, textarea { width: 100%; border: none; outline: none; font-family: inherit; font-weight: bold; background: transparent; font-size: 15px; color: #000; }
+        textarea { resize: vertical; min-height: 55px; overflow: hidden; line-height: 1.4; }
+
+        /* BUTTONS */
+        .no-print { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 40px; }
+        button { padding: 16px 28px; cursor: pointer; border: 4px solid var(--black); font-weight: 900; background: var(--white); box-shadow: 6px 6px 0px var(--black); text-transform: uppercase; font-family: inherit; }
+        button:active { transform: translate(3px, 3px); box-shadow: none; }
+        .btn-load { background: #4CAF50 !important; color: white !important; }
+
+        @media print { 
+            .no-print, .action-col, button, .filter-section { display: none !important; }
+            body { background: white; padding: 0; }
+            .form-container { border: 2px solid #000; box-shadow: none; width: 100%; padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="form-container">
+    <div class="header">
+        <div style="flex-grow: 1;">
+            <input type="text" id="corpName" value="ULLSWATER CORPORATION" style="font-size: 38px;" oninput="saveAndRefresh()">
+            <input type="text" id="corpSub" value="LIQUIDATION MASTER LEDGER | FULL AUDIT MIRROR v7.7" style="font-size: 13px; letter-spacing: 1px;" oninput="saveAndRefresh()">
+            <div style="margin-top: 35px;">REF NO: <input type="text" id="refNo" placeholder="JV-2026-XXXX" style="width: 250px; border-bottom: 4px solid #000;" oninput="saveAndRefresh()"></div>
+            <div style="margin-top: 10px;">DATE: <input type="date" id="repDate" style="width: 180px;" oninput="saveAndRefresh()"></div>
+        </div>
+        <div id="qrcode-container">
+            <div id="qrcode"></div>
+            <div style="font-size: 11px; font-weight: 900; margin-top: 10px; border-top: 4px solid #000; padding-top: 8px;">STRUCTURED AUDIT MIRROR (VIVID)</div>
+        </div>
+    </div>
+
+    <div class="filter-section no-print">
+        <span>FILTER COVERAGE:</span>
+        FROM <input type="date" id="fFrom" oninput="applyFilter()">
+        TO <input type="date" id="fTo" oninput="applyFilter()">
+        <button onclick="resetFilter()" style="padding:4px 8px; font-size:10px; box-shadow:none;">RESET</button>
+    </div>
+
+    <table>
+        <tr>
+            <td style="text-align: left; width: 65%;"><strong>CLAIMANT:</strong> <input type="text" id="empName" placeholder="ENTER NAME" oninput="saveAndRefresh()"></td>
+            <td style="text-align: left;"><strong>ADVANCE:</strong> PHP <input type="number" id="startAmt" oninput="calc(); saveAndRefresh()" value="0" step="0.01"></td>
+        </tr>
+    </table>
+
+    <table id="liqTable">
+        <thead><tr class="bg-black">
+            <th style="width:18%;">DATE</th>
+            <th style="width:42%;">PARTICULARS (LONG TEXT)</th>
+            <th style="width:15%;">CAT</th>
+            <th style="width:20%;">AMOUNT</th>
+            <th class="action-col" style="width:45px;"></th>
+        </tr></thead>
+        <tbody id="liqBody"></tbody>
+    </table>
+    
+    <button class="no-print" onclick="addRow()" style="width:100%; margin-top:15px; border:3px dashed #000;">+ APPEND MANUAL ENTRY</button>
+
+    <div style="text-align: right; border: 8px solid #000; padding: 25px; margin-top: 30px;">
+        <div style="font-weight: 800; font-size: 18px;">VISIBLE SUBTOTAL: PHP <span id="totalExp">0.00</span></div>
+        <div style="font-size: 34px; font-weight: 900; text-decoration: underline;">NET BALANCE: PHP <span id="balance">0.00</span></div>
+    </div>
+
+    <div class="no-print">
+        <button onclick="window.print()" style="background: #00d9ff;">PRINT REPORT</button>
+        <button class="btn-load" onclick="document.getElementById('file-picker').click()">LOAD BULK DATA</button>
+        <button onclick="exportCSV()" style="background: #ffcc00;">EXPORT CSV</button>
+        <button onclick="clearAll()" style="background: #ff5555; color: #fff;">WIPE SYSTEM</button>
+        <input type="file" id="file-picker" style="display:none;" accept=".json" onchange="handleBulkFile(event)">
+    </div>
+</div>
+
+<script>
+    let qr;
+    window.onload = () => {
+        qr = new QRCode(document.getElementById("qrcode"), { 
+            width: 320, height: 320, correctLevel: QRCode.CorrectLevel.H 
+        });
+        loadLocal();
+    };
+
+    function addRow(d="", desc="", cat="", amt="0") {
+        const tr = document.createElement('tr');
+        tr.className = 'data-row';
+        tr.innerHTML = `
+            <td><input type="date" class="rDate" value="${d}" oninput="saveAndRefresh()"></td>
+            <td><textarea class="rDesc" oninput="saveAndRefresh()">${desc}</textarea></td>
+            <td><input type="text" class="rCat" value="${cat}" oninput="saveAndRefresh()"></td>
+            <td><input type="number" class="rAmt" value="${amt}" step="0.01" style="text-align: right;" oninput="calc(); saveAndRefresh()"></td>
+            <td class="action-col"><button onclick="this.parentElement.parentElement.remove(); calc(); saveAndRefresh()" style="background:#000; color:#fff; border:none; padding:5px 12px;">X</button></td>
+        `;
+        document.getElementById('liqBody').appendChild(tr);
+        calc();
+    }
+
+    function calc() {
+        let exp = 0;
+        document.querySelectorAll('.data-row').forEach(r => {
+            if (r.style.display !== 'none') exp += parseFloat(r.querySelector('.rAmt').value) || 0;
+        });
+        document.getElementById('totalExp').innerText = exp.toLocaleString(undefined, {minimumFractionDigits: 2});
+        let start = parseFloat(document.getElementById('startAmt').value) || 0;
+        document.getElementById('balance').innerText = (start - exp).toLocaleString(undefined, {minimumFractionDigits: 2});
+    }
+
+    function applyFilter() {
+        const from = document.getElementById('fFrom').value;
+        const to = document.getElementById('fTo').value;
+        document.querySelectorAll('.data-row').forEach(r => {
+            const rd = r.querySelector('.rDate').value;
+            r.style.display = ((!from || rd >= from) && (!to || rd <= to)) ? '' : 'none';
+        });
+        calc();
+        saveAndRefresh();
+    }
+
+    function resetFilter() {
+        document.getElementById('fFrom').value = '';
+        document.getElementById('fTo').value = '';
+        document.querySelectorAll('.data-row').forEach(r => r.style.display = '');
+        calc();
+        saveAndRefresh();
+    }
+
+    function saveAndRefresh() {
+        const items = Array.from(document.querySelectorAll('.data-row')).map(r => ({
+            d: r.querySelector('.rDate').value,
+            desc: r.querySelector('.rDesc').value,
+            cat: r.querySelector('.rCat').value,
+            amt: r.querySelector('.rAmt').value,
+            v: r.style.display !== 'none'
+        }));
+        
+        const data = { 
+            ref: document.getElementById('refNo').value, 
+            emp: document.getElementById('empName').value, 
+            items: items 
+        };
+        
+        localStorage.setItem('ULLSWATER_V7_7', JSON.stringify(data));
+        
+        // QR Mirror ONLY visible items
+        let qrText = `ULLSWATER AUDIT\nREF: ${data.ref}\nTOTAL: ${document.getElementById('totalExp').innerText}\n----\n`;
+        items.filter(i => i.v).forEach(i => {
+            qrText += `${i.d} | ${i.desc.substring(0, 45)} | PHP ${i.amt}\n`;
+        });
+        qr.makeCode(qrText);
+    }
+
+    function handleBulkFile(e) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = JSON.parse(ev.target.result);
+                const items = data.items || data;
+                if(confirm("Append to current list? (Cancel to clear first)")) {
+                    // Do nothing, just append
+                } else {
+                    document.getElementById('liqBody').innerHTML = '';
+                }
+                items.forEach(i => addRow(i.d || i.date, i.desc || i.particulars, i.cat || "", i.amt || i.amount));
+                saveAndRefresh();
+            } catch(err) { alert("Error loading file."); }
+        };
+        reader.readAsText(e.target.files[0]);
+    }
+
+    function exportCSV() {
+        let csv = [`"ULLSWATER AUDIT MIRROR"`, `"REF:","${document.getElementById('refNo').value}"`, `"DATE","PARTICULARS","AMOUNT"`];
+        document.querySelectorAll('.data-row').forEach(r => {
+            if (r.style.display !== 'none') {
+                csv.push(`"${r.querySelector('.rDate').value}","${r.querySelector('.rDesc').value.replace(/"/g, '""')}","${r.querySelector('.rAmt').value}"`);
+            }
+        });
+        const blob = new Blob([csv.join('\n')], {type: 'text/csv'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `ULLSWATER_MIRROR_${document.getElementById('refNo').value || 'REPORT'}.csv`;
+        link.click();
+    }
+
+    function loadLocal() {
+        const saved = JSON.parse(localStorage.getItem('ULLSWATER_V7_7'));
+        if(saved && saved.items) {
+            document.getElementById('refNo').value = saved.ref || "";
+            document.getElementById('empName').value = saved.emp || "";
+            saved.items.forEach(i => addRow(i.d, i.desc, i.cat, i.amt));
+        } else { addRow(); }
+    }
+
+    function clearAll() { if(confirm("Wipe system?")) { localStorage.clear(); location.reload(); } }
+</script>
+</body>
+</html>
